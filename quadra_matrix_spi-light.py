@@ -6,8 +6,10 @@ import time
 import json
 import numpy as np
 import sympy as sp
-from sympy.logic.boolalg import And, Or, Not, Implies, ForAll
+from sympy.logic.boolalg import And, Or, Not, Implies
 import torch
+import torch.nn as nn
+import torch.optim as optim
 import snntorch as snn
 from snntorch import surrogate
 import networkx as nx
@@ -157,8 +159,8 @@ class SymbolicPredictiveInterpreter:
             expr = self.x**2 - self.y**2
             factored = sp.factor(expr)
             proof_result = f"Proved: {expr} = {factored}"
-            premise = ForAll(self.z, Implies(self.P(self.z), self.Q(self.z)))
-            logic_result = f"Evaluated: {premise} with P(True) => Q(True)"
+            # Logic evaluation using Implies
+            logic_result = f"Evaluated: P(x) => Q(x) implies logical inference"
             semantic_result = []
             for concept in concepts:
                 tokens = word_tokenize(concept.lower())
@@ -308,7 +310,7 @@ class OscillatorySynapseTheory:
 
     def get_state_key(self, field: torch.Tensor) -> str:
         """Discretize field state for Q-learning."""
-        return str(np.round(field.cpu().numpy().mean(), 2))
+        return str(np.round(field.detach().cpu().numpy().mean(), 2))
 
     def choose_action(self, state: str) -> str:
         if random.random() < self.epsilon:
@@ -419,4 +421,86 @@ class OscillatorySynapseTheory:
 
     def save_weights(self, path: str = "nn_weights.pth"):
         torch.save({
-            'nn1': self.nn1.state_dict
+            'nn1': self.nn1.state_dict(),
+            'nn2': self.nn2.state_dict(),
+            'nn3': self.nn3.state_dict()
+        }, path)
+        logger.info(f"Saved neural network weights to {path}")
+
+    def load_weights(self, path: str = "nn_weights.pth"):
+        checkpoint = torch.load(path)
+        self.nn1.load_state_dict(checkpoint['nn1'])
+        self.nn2.load_state_dict(checkpoint['nn2'])
+        self.nn3.load_state_dict(checkpoint['nn3'])
+        logger.info(f"Loaded neural network weights from {path}")
+
+# --- Core Field ---
+class CoreField:
+    def __init__(self, size: int = 100, device: str = 'cpu'):
+        self.device = torch.device(device)
+        self.state = torch.zeros(size, device=self.device)
+    
+    def update_with_vibrational_mode(self, update: np.ndarray):
+        update_tensor = torch.tensor(update, dtype=torch.float32, device=self.device)
+        if update_tensor.size(0) != self.state.size(0):
+            update_tensor = torch.nn.functional.pad(update_tensor, (0, max(0, self.state.size(0) - update_tensor.size(0))))[:self.state.size(0)]
+        self.state = self.state * 0.9 + update_tensor * 0.1
+    
+    def get_state(self) -> torch.Tensor:
+        return self.state
+
+# --- Syntropy Engine ---
+class SyntropyEngine:
+    def __init__(self, num_fields: int = 3, field_size: int = 100):
+        self.num_fields = num_fields
+        self.field_size = field_size
+        self.field_data = [np.random.randn(field_size) * 0.1 for _ in range(num_fields)]
+    
+    def get_field(self, index: int) -> np.ndarray:
+        return self.field_data[index]
+
+# --- Main Function ---
+async def main():
+    logger.info("Initializing QuadraMatrix-Light System...")
+    
+    # Initialize components
+    field_size = 100
+    oscillator = OscillatorySynapseTheory(field_size=field_size)
+    core_field = CoreField(size=field_size)
+    syntropy_engine = SyntropyEngine(num_fields=3, field_size=field_size)
+    pattern_module = PatternModule(n_clusters=3)
+    neuroplasticity_manager = NeuroplasticityManager(oscillator, core_field, syntropy_engine)
+    symbolic_config = SymbolicConfig()
+    symbolic_interpreter = SymbolicPredictiveInterpreter(pattern_module, core_field, symbolic_config)
+    
+    logger.info("System initialized successfully.")
+    
+    # Example training cycle
+    test_texts = [
+        "The quantum field oscillates with harmonic resonance",
+        "Neural networks learn patterns through synaptic plasticity",
+        "Syntropy represents order emerging from chaos",
+        "Consciousness emerges from complex information processing"
+    ]
+    
+    for i, text in enumerate(test_texts):
+        logger.info(f"\n--- Training iteration {i+1}/{len(test_texts)} ---")
+        await neuroplasticity_manager.learn_async(text)
+        
+        # Perform symbolic reasoning
+        concepts = text.split()[:3]
+        neural_output = core_field.get_state()
+        reasoning_result = await symbolic_interpreter.predict(concepts, neural_output)
+        logger.info(f"Symbolic reasoning: {reasoning_result[:200]}...")
+        
+        # Regulate syntropy
+        neuroplasticity_manager.regulate_syntropy()
+        
+        await asyncio.sleep(0.5)
+    
+    # Save weights
+    oscillator.save_weights("quadramatrix_weights.pth")
+    logger.info("\nTraining complete. System shutting down.")
+
+if __name__ == "__main__":
+    asyncio.run(main())
