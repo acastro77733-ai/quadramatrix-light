@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuadraMatrix-Light Benchmark Dashboard</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(56, 239, 125, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+            color: white;
+        }
+        
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(235, 51, 73, 0.4);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%);
+            color: white;
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(149, 165, 166, 0.4);
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .metric {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .metric-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .status-log {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+        
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .log-timestamp {
+            color: #999;
+            margin-right: 10px;
+        }
+        
+        .log-info { color: #667eea; }
+        .log-success { color: #38ef7d; }
+        .log-warning { color: #f39c12; }
+        .log-error { color: #eb3349; }
+        
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        
+        .chart-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .chart-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+        
+        .training-info {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.active {
+            background: #38ef7d;
+            box-shadow: 0 0 10px #38ef7d;
+        }
+        
+        .status-indicator.inactive {
+            background: #95a5a6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ QuadraMatrix-Light Benchmark Dashboard</h1>
+            <p>Real-time Spiking Neural Network Training Monitor</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <!-- Controls -->
+                <div class="card">
+                    <h2>Controls</h2>
+                    <div class="controls">
+                        <button id="initBtn" class="btn-primary" onclick="initializeSystem()">Initialize System</button>
+                        <button id="startBtn" class="btn-success" onclick="startTraining()" disabled>Start Training</button>
+                        <button id="stopBtn" class="btn-danger" onclick="stopTraining()" disabled>Stop Training</button>
+                        <button id="resetBtn" class="btn-secondary" onclick="resetSystem()">Reset</button>
+                    </div>
+                </div>
+                
+                <!-- Real-time Metrics -->
+                <div class="card">
+                    <h2>Real-time Metrics</h2>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <div class="metric-label">Iterations</div>
+                            <div class="metric-value" id="iterations">--</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Current Loss</div>
+                            <div class="metric-value" id="loss">--</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Avg Reward</div>
+                            <div class="metric-value" id="reward">--</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Field Variance</div>
+                            <div class="metric-value" id="variance">--</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Field Mean</div>
+                            <div class="metric-value" id="mean">--</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Integrity Strikes</div>
+                            <div class="metric-value" id="strikes">--</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Q-Table Size</div>
+                            <div class="metric-value" id="qtable">--</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Status</div>
+                            <div class="metric-value">
+                                <span class="status-indicator inactive" id="statusIndicator"></span>
+                                <span id="statusText">Idle</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Status Log -->
+                <div class="card">
+                    <h2>Status Log</h2>
+                    <div class="status-log" id="statusLog"></div>
+                </div>
+            </div>
+            
+            <div class="charts-area">
+                <!-- Charts -->
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <h3>Training Loss Over Time</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="lossChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-card">
+                        <h3>Average Reward Over Time</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="rewardChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-card">
+                        <h3>Field Variance Over Time</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="varianceChart"></canvas>
+                        </div>
+                        <div class="training-info">
+                            <strong>Thresholds:</strong> Stability (0.05) | Critical (0.25)
+                        </div>
+                    </div>
+                    
+                    <div class="chart-card">
+                        <h3>Field Mean Over Time</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="meanChart"></canvas>
+                        </div>
+                        <div class="training-info">
+                            <strong>Target:</strong> 0.5 (balanced field state)
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Current Training Text -->
+                <div class="card" style="margin-top: 20px;">
+                    <h2>Current Training Text</h2>
+                    <div id="trainingText" style="padding: 15px; background: white; border-radius: 8px; font-style: italic;">
+                        No training in progress...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Socket.IO connection
+        const socket = io();
+        
+        // Chart data storage
+        let lossData = [];
+        let rewardData = [];
+        let varianceData = [];
+        let meanData = [];
+        let iterations = [];
+        
+        // Initialize charts
+        const chartConfig = {
+            type: 'line',
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 300
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Iteration'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Value'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        };
+        
+        const lossChart = new Chart(document.getElementById('lossChart'), {
+            ...chartConfig,
+            data: {
+                labels: iterations,
+                datasets: [{
+                    label: 'Loss',
+                    data: lossData,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            }
+        });
+        
+        const rewardChart = new Chart(document.getElementById('rewardChart'), {
+            ...chartConfig,
+            data: {
+                labels: iterations,
+                datasets: [{
+                    label: 'Reward',
+                    data: rewardData,
+                    borderColor: '#38ef7d',
+                    backgroundColor: 'rgba(56, 239, 125, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            }
+        });
+        
+        const varianceChart = new Chart(document.getElementById('varianceChart'), {
+            ...chartConfig,
+            data: {
+                labels: iterations,
+                datasets: [{
+                    label: 'Variance',
+                    data: varianceData,
+                    borderColor: '#eb3349',
+                    backgroundColor: 'rgba(235, 51, 73, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                ...chartConfig.options,
+                plugins: {
+                    ...chartConfig.options.plugins,
+                    annotation: {
+                        annotations: {
+                            line1: {
+                                type: 'line',
+                                yMin: 0.05,
+                                yMax: 0.05,
+                                borderColor: 'orange',
+                                borderWidth: 2,
+                                borderDash: [5, 5]
+                            },
+                            line2: {
+                                type: 'line',
+                                yMin: 0.25,
+                                yMax: 0.25,
+                                borderColor: 'red',
+                                borderWidth: 2,
+                                borderDash: [5, 5]
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        const meanChart = new Chart(document.getElementById('meanChart'), {
+            ...chartConfig,
+            data: {
+                labels: iterations,
+                datasets: [{
+                    label: 'Mean',
+                    data: meanData,
+                    borderColor: '#764ba2',
+                    backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            }
+        });
+        
+        // Socket event handlers
+        socket.on('status_message', (data) => {
+            addLogEntry(data.message, data.type);
+        });
+        
+        socket.on('system_initialized', (data) => {
+            document.getElementById('initBtn').disabled = true;
+            document.getElementById('startBtn').disabled = false;
+        });
+        
+        socket.on('training_status', (data) => {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            if (data.running) {
+                indicator.classList.remove('inactive');
+                indicator.classList.add('active');
+                statusText.textContent = 'Training';
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+            } else {
+                indicator.classList.remove('active');
+                indicator.classList.add('inactive');
+                statusText.textContent = 'Idle';
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+            }
+        });
+        
+        socket.on('metrics_update', (data) => {
+            // Update metrics display
+            document.getElementById('iterations').textContent = data.iteration;
+            document.getElementById('loss').textContent = data.loss.toFixed(4);
+            document.getElementById('reward').textContent = data.reward.toFixed(4);
+            document.getElementById('variance').textContent = data.variance.toFixed(6);
+            document.getElementById('mean').textContent = data.mean.toFixed(4);
+            document.getElementById('strikes').textContent = data.integrity_strikes;
+            document.getElementById('qtable').textContent = data.qtable_size;
+            document.getElementById('trainingText').textContent = data.text;
+            
+            // Update charts
+            iterations.push(data.iteration);
+            lossData.push(data.loss);
+            rewardData.push(data.reward);
+            varianceData.push(data.variance);
+            meanData.push(data.mean);
+            
+            // Keep only last 50 points
+            if (iterations.length > 50) {
+                iterations.shift();
+                lossData.shift();
+                rewardData.shift();
+                varianceData.shift();
+                meanData.shift();
+            }
+            
+            lossChart.update();
+            rewardChart.update();
+            varianceChart.update();
+            meanChart.update();
+        });
+        
+        socket.on('system_reset', () => {
+            // Reset UI
+            iterations = [];
+            lossData = [];
+            rewardData = [];
+            varianceData = [];
+            meanData = [];
+            
+            lossChart.update();
+            rewardChart.update();
+            varianceChart.update();
+            meanChart.update();
+            
+            document.getElementById('iterations').textContent = '--';
+            document.getElementById('loss').textContent = '--';
+            document.getElementById('reward').textContent = '--';
+            document.getElementById('variance').textContent = '--';
+            document.getElementById('mean').textContent = '--';
+            document.getElementById('strikes').textContent = '--';
+            document.getElementById('qtable').textContent = '--';
+            document.getElementById('trainingText').textContent = 'No training in progress...';
+            
+            document.getElementById('initBtn').disabled = false;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = true;
+            
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            indicator.classList.remove('active');
+            indicator.classList.add('inactive');
+            statusText.textContent = 'Idle';
+        });
+        
+        // Control functions
+        function initializeSystem() {
+            socket.emit('initialize_system');
+        }
+        
+        function startTraining() {
+            socket.emit('start_training');
+        }
+        
+        function stopTraining() {
+            socket.emit('stop_training');
+        }
+        
+        function resetSystem() {
+            socket.emit('reset_system');
+        }
+        
+        // Helper functions
+        function addLogEntry(message, type) {
+            const logDiv = document.getElementById('statusLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span><span class="log-${type}">${message}</span>`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        // Initial log entry
+        addLogEntry('Dashboard loaded. Ready to initialize system.', 'info');
+    </script>
+</body>
+</html>
