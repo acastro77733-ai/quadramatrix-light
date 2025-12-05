@@ -362,6 +362,7 @@
         let varianceData = [];
         let meanData = [];
         let iterations = [];
+        const MAX_POINTS = 50;
         
         // Initialize charts
         const chartConfig = {
@@ -481,43 +482,42 @@
         });
         
         // Socket event handlers
+        socket.on('initial_state', (data) => {
+            hydrateFromSnapshot(data);
+        });
+        
         socket.on('status_message', (data) => {
-            addLogEntry(data.message, data.type);
+            addLogEntry(data.message, data.type, data.timestamp);
         });
         
         socket.on('system_initialized', (data) => {
             document.getElementById('initBtn').disabled = true;
             document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            setStatusIndicator(false);
+            refreshFromServer();
         });
         
         socket.on('training_status', (data) => {
-            const indicator = document.getElementById('statusIndicator');
-            const statusText = document.getElementById('statusText');
-            
+            setStatusIndicator(data.running);
             if (data.running) {
-                indicator.classList.remove('inactive');
-                indicator.classList.add('active');
-                statusText.textContent = 'Training';
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
             } else {
-                indicator.classList.remove('active');
-                indicator.classList.add('inactive');
-                statusText.textContent = 'Idle';
                 document.getElementById('startBtn').disabled = false;
                 document.getElementById('stopBtn').disabled = true;
             }
         });
         
         socket.on('metrics_update', (data) => {
-            // Update metrics display
-            document.getElementById('iterations').textContent = data.iteration;
-            document.getElementById('loss').textContent = data.loss.toFixed(4);
-            document.getElementById('reward').textContent = data.reward.toFixed(4);
-            document.getElementById('variance').textContent = data.variance.toFixed(6);
-            document.getElementById('mean').textContent = data.mean.toFixed(4);
-            document.getElementById('strikes').textContent = data.integrity_strikes;
-            document.getElementById('qtable').textContent = data.qtable_size;
+            updateMetricDisplays({
+                loss: data.loss,
+                reward: data.reward,
+                variance: data.variance,
+                mean: data.mean,
+                integrity_strikes: data.integrity_strikes,
+                qtable_size: data.qtable_size
+            }, data.iteration);
             document.getElementById('trainingText').textContent = data.text;
             
             // Update charts
@@ -528,7 +528,7 @@
             meanData.push(data.mean);
             
             // Keep only last 50 points
-            if (iterations.length > 50) {
+            if (iterations.length > MAX_POINTS) {
                 iterations.shift();
                 lossData.shift();
                 rewardData.shift();
@@ -543,36 +543,14 @@
         });
         
         socket.on('system_reset', () => {
-            // Reset UI
-            iterations = [];
-            lossData = [];
-            rewardData = [];
-            varianceData = [];
-            meanData = [];
-            
-            lossChart.update();
-            rewardChart.update();
-            varianceChart.update();
-            meanChart.update();
-            
-            document.getElementById('iterations').textContent = '--';
-            document.getElementById('loss').textContent = '--';
-            document.getElementById('reward').textContent = '--';
-            document.getElementById('variance').textContent = '--';
-            document.getElementById('mean').textContent = '--';
-            document.getElementById('strikes').textContent = '--';
-            document.getElementById('qtable').textContent = '--';
+            clearChartData();
+            resetMetricDisplays();
             document.getElementById('trainingText').textContent = 'No training in progress...';
-            
             document.getElementById('initBtn').disabled = false;
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = true;
-            
-            const indicator = document.getElementById('statusIndicator');
-            const statusText = document.getElementById('statusText');
-            indicator.classList.remove('active');
-            indicator.classList.add('inactive');
-            statusText.textContent = 'Idle';
+            setStatusIndicator(false);
+            refreshFromServer();
         });
         
         // Control functions
@@ -593,18 +571,156 @@
         }
         
         // Helper functions
-        function addLogEntry(message, type) {
+        async function refreshFromServer() {
+            try {
+                const response = await fetch('/api/status');
+                if (!response.ok) {
+                    return;
+                }
+                const data = await response.json();
+                hydrateFromSnapshot(data);
+            } catch (error) {
+                console.error('Failed to refresh state', error);
+            }
+        }
+
+        function hydrateFromSnapshot(snapshot) {
+            if (!snapshot) {
+                return;
+            }
+            updateControls(snapshot);
+            updateMetricDisplays(snapshot.current_metrics, snapshot.iteration_count);
+            updateChartsFromHistory(snapshot.history || {});
+            document.getElementById('trainingText').textContent = snapshot.current_text || 'No training in progress...';
+            renderStatusLog(snapshot.status_log || []);
+        }
+
+        function updateControls(snapshot) {
+            const initialized = !!snapshot.initialized;
+            const running = !!snapshot.running;
+            document.getElementById('initBtn').disabled = initialized;
+            document.getElementById('startBtn').disabled = !initialized || running;
+            document.getElementById('stopBtn').disabled = !running;
+            setStatusIndicator(running);
+        }
+
+        function updateMetricDisplays(metrics, iterationCount) {
+            const lossEl = document.getElementById('loss');
+            const rewardEl = document.getElementById('reward');
+            const varianceEl = document.getElementById('variance');
+            const meanEl = document.getElementById('mean');
+            const strikesEl = document.getElementById('strikes');
+            const qtableEl = document.getElementById('qtable');
+            const iterationEl = document.getElementById('iterations');
+            if (!metrics) {
+                lossEl.textContent = '--';
+                rewardEl.textContent = '--';
+                varianceEl.textContent = '--';
+                meanEl.textContent = '--';
+                strikesEl.textContent = '--';
+                qtableEl.textContent = '--';
+                iterationEl.textContent = '--';
+                return;
+            }
+            iterationEl.textContent = iterationCount ?? '--';
+            lossEl.textContent = metrics.loss !== null && metrics.loss !== undefined ? metrics.loss.toFixed(4) : '--';
+            rewardEl.textContent = metrics.reward !== null && metrics.reward !== undefined ? metrics.reward.toFixed(4) : '--';
+            varianceEl.textContent = metrics.variance !== null && metrics.variance !== undefined ? metrics.variance.toFixed(6) : '--';
+            meanEl.textContent = metrics.mean !== null && metrics.mean !== undefined ? metrics.mean.toFixed(4) : '--';
+            strikesEl.textContent = metrics.integrity_strikes ?? '--';
+            qtableEl.textContent = metrics.qtable_size ?? '--';
+        }
+
+        function renderStatusLog(entries) {
             const logDiv = document.getElementById('statusLog');
-            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML = '';
+            entries.forEach((entry) => addLogEntry(entry.message, entry.type, entry.timestamp));
+        }
+
+        function addLogEntry(message, type = 'info', timestamp = null) {
+            const logDiv = document.getElementById('statusLog');
             const entry = document.createElement('div');
             entry.className = 'log-entry';
-            entry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span><span class="log-${type}">${message}</span>`;
+            const timeLabel = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-timestamp">[${timeLabel}]</span><span class="log-${type}">${message}</span>`;
             logDiv.appendChild(entry);
             logDiv.scrollTop = logDiv.scrollHeight;
         }
-        
-        // Initial log entry
-        addLogEntry('Dashboard loaded. Ready to initialize system.', 'info');
+
+        function replaceData(target, values) {
+            target.length = 0;
+            if (values && values.length) {
+                target.push(...values);
+            }
+        }
+
+        function updateChartsFromHistory(history = {}) {
+            const lossHistory = history.loss || [];
+            const rewardHistory = history.reward || [];
+            const varianceHistory = history.variance || [];
+            const meanHistory = history.mean || [];
+            const baseLength = lossHistory.length || rewardHistory.length || varianceHistory.length || meanHistory.length;
+            if (!baseLength) {
+                clearChartData();
+                return;
+            }
+            const labelCount = Math.min(baseLength, MAX_POINTS);
+            const startIndex = Math.max(0, baseLength - labelCount);
+            const labels = [];
+            for (let i = 0; i < labelCount; i += 1) {
+                labels.push(startIndex + i + 1);
+            }
+            const sliceLast = (arr) => arr.slice(Math.max(0, arr.length - labelCount));
+            replaceData(iterations, labels);
+            replaceData(lossData, sliceLast(lossHistory));
+            replaceData(rewardData, sliceLast(rewardHistory));
+            replaceData(varianceData, sliceLast(varianceHistory));
+            replaceData(meanData, sliceLast(meanHistory));
+            updateAllCharts();
+        }
+
+        function updateAllCharts() {
+            lossChart.update();
+            rewardChart.update();
+            varianceChart.update();
+            meanChart.update();
+        }
+
+        function clearChartData() {
+            replaceData(iterations, []);
+            replaceData(lossData, []);
+            replaceData(rewardData, []);
+            replaceData(varianceData, []);
+            replaceData(meanData, []);
+            updateAllCharts();
+        }
+
+        function resetMetricDisplays() {
+            document.getElementById('iterations').textContent = '--';
+            document.getElementById('loss').textContent = '--';
+            document.getElementById('reward').textContent = '--';
+            document.getElementById('variance').textContent = '--';
+            document.getElementById('mean').textContent = '--';
+            document.getElementById('strikes').textContent = '--';
+            document.getElementById('qtable').textContent = '--';
+        }
+
+        function setStatusIndicator(isRunning) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            if (isRunning) {
+                indicator.classList.add('active');
+                indicator.classList.remove('inactive');
+                statusText.textContent = 'Training';
+            } else {
+                indicator.classList.remove('active');
+                indicator.classList.add('inactive');
+                statusText.textContent = 'Idle';
+            }
+        }
+
+        // Load persisted state on page load as a fallback
+        refreshFromServer();
     </script>
 </body>
 </html>
